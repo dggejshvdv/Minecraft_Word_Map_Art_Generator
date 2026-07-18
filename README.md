@@ -113,7 +113,6 @@ python minecraft_word_map_art_generator.py
 .
 ├── minecraft_word_map_art_generator.py  # 主程序
 ├── ttf/                                   # 字体文件目录
-│   └── AaZhuNiWoMingMeiXiangChunTian-2.ttf  # 示例字体
 ├── litematic/                             # 投影文件输出目录
 └── README.md                               # 说明文档
 ```
