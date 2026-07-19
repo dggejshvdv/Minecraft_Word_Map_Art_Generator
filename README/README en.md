@@ -111,11 +111,10 @@ Total block count: 5246
 │   ├── zh_cn.json                         # Chinese Translation
 │   └── en.json                            # English Translation
 ├── ttf/                                   # Font Files Directory
-│   └── AaZhuNiWoMingMeiXiangChunTian-2.ttf  # Example Font
 ├── litematic/                             # Projection Files Output Directory
-├── minecraft_word_map_art_generator.py    # Legacy CLI Tool (Preserved)
-├── README zh_cn.md                        # Chinese Documentation
-└── README en.md                           # English Documentation
+└── README/
+    ├── README zh_cn.md                        # Chinese Documentation
+    └── README en.md                           # English Documentation
 ```
 
 ## File Descriptions
