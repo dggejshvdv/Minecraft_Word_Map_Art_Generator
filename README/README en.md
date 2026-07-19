@@ -1,4 +1,4 @@
-# Minecraft Word Map Art Generator (128×128)
+# Minecraft Word Map Art Generator 
 
 A tool for generating Minecraft map art projection files, supporting rendering text into 128×128 giant tiled map art using the Litematica mod for construction.
 
