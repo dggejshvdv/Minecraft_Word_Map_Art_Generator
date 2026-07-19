@@ -1,4 +1,4 @@
-# 我的世界文字地图画生成器（128×128）
+# 我的世界文字地图画生成器
 
 一个用于生成 Minecraft 地图画投影文件的工具，支持将文字渲染为 128×128 的巨型平铺地图画，使用 Litematica 投影模组进行建造。
 
@@ -111,11 +111,10 @@ python ui.py
 │   ├── zh_cn.json                         # 中文翻译
 │   └── en.json                            # 英文翻译
 ├── ttf/                                   # 字体文件目录
-│   └── AaZhuNiWoMingMeiXiangChunTian-2.ttf  # 示例字体
 ├── litematic/                             # 投影文件输出目录
-├── minecraft_word_map_art_generator.py    # 旧版命令行工具（保留）
-├── README zh_cn.md                        # 中文说明文档
-└── README en.md                           # 英文说明文档
+└── README/
+    ├── README zh_cn.md                        # 中文说明文档
+    └── README en.md                           # 英文说明文档
 ```
 
 ## 文件说明
