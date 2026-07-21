@@ -7,4 +7,4 @@
 
 ## Changelog | 更新日志
 
-- [CHANGELOG.md](CHANGELOG.md)
+- [changelog.md](changelog.md)
