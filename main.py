@@ -5,24 +5,49 @@ from PIL import Image, ImageDraw, ImageFont
 from litemapy import Schematic, Region, BlockState
 from i18n import t
 
-MINECRAFT_CONCRETE_COLORS = {
-    'white': {'name': 'white', 'abbr': 'W', 'rgb': (255, 255, 255), 'block': 'minecraft:white_concrete'},
-    'orange': {'name': 'orange', 'abbr': 'O', 'rgb': (255, 163, 0), 'block': 'minecraft:orange_concrete'},
-    'magenta': {'name': 'magenta', 'abbr': 'M', 'rgb': (255, 0, 255), 'block': 'minecraft:magenta_concrete'},
-    'light_blue': {'name': 'light_blue', 'abbr': 'LB', 'rgb': (0, 191, 255), 'block': 'minecraft:light_blue_concrete'},
-    'yellow': {'name': 'yellow', 'abbr': 'Y', 'rgb': (255, 255, 0), 'block': 'minecraft:yellow_concrete'},
-    'lime': {'name': 'lime', 'abbr': 'L', 'rgb': (0, 255, 0), 'block': 'minecraft:lime_concrete'},
-    'pink': {'name': 'pink', 'abbr': 'P', 'rgb': (255, 192, 203), 'block': 'minecraft:pink_concrete'},
-    'gray': {'name': 'gray', 'abbr': 'Gy', 'rgb': (128, 128, 128), 'block': 'minecraft:gray_concrete'},
-    'silver': {'name': 'silver', 'abbr': 'S', 'rgb': (192, 192, 192), 'block': 'minecraft:light_gray_concrete'},
-    'cyan': {'name': 'cyan', 'abbr': 'C', 'rgb': (0, 255, 255), 'block': 'minecraft:cyan_concrete'},
-    'purple': {'name': 'purple', 'abbr': 'V', 'rgb': (128, 0, 128), 'block': 'minecraft:purple_concrete'},
-    'blue': {'name': 'blue', 'abbr': 'B', 'rgb': (0, 0, 255), 'block': 'minecraft:blue_concrete'},
-    'brown': {'name': 'brown', 'abbr': 'Br', 'rgb': (165, 42, 42), 'block': 'minecraft:brown_concrete'},
-    'green': {'name': 'green', 'abbr': 'G', 'rgb': (0, 128, 0), 'block': 'minecraft:green_concrete'},
-    'red': {'name': 'red', 'abbr': 'R', 'rgb': (255, 0, 0), 'block': 'minecraft:red_concrete'},
-    'black': {'name': 'black', 'abbr': 'Bl', 'rgb': (0, 0, 0), 'block': 'minecraft:black_concrete'},
+MINECRAFT_COLORS = {
+    'white': {'name': 'white', 'abbr': 'W', 'rgb': (255, 255, 255)},
+    'orange': {'name': 'orange', 'abbr': 'O', 'rgb': (255, 163, 0)},
+    'magenta': {'name': 'magenta', 'abbr': 'M', 'rgb': (255, 0, 255)},
+    'light_blue': {'name': 'light_blue', 'abbr': 'LB', 'rgb': (0, 191, 255)},
+    'yellow': {'name': 'yellow', 'abbr': 'Y', 'rgb': (255, 255, 0)},
+    'lime': {'name': 'lime', 'abbr': 'L', 'rgb': (0, 255, 0)},
+    'pink': {'name': 'pink', 'abbr': 'P', 'rgb': (255, 192, 203)},
+    'gray': {'name': 'gray', 'abbr': 'Gy', 'rgb': (128, 128, 128)},
+    'silver': {'name': 'silver', 'abbr': 'S', 'rgb': (192, 192, 192)},
+    'cyan': {'name': 'cyan', 'abbr': 'C', 'rgb': (0, 255, 255)},
+    'purple': {'name': 'purple', 'abbr': 'V', 'rgb': (128, 0, 128)},
+    'blue': {'name': 'blue', 'abbr': 'B', 'rgb': (0, 0, 255)},
+    'brown': {'name': 'brown', 'abbr': 'Br', 'rgb': (165, 42, 42)},
+    'green': {'name': 'green', 'abbr': 'G', 'rgb': (0, 128, 0)},
+    'red': {'name': 'red', 'abbr': 'R', 'rgb': (255, 0, 0)},
+    'black': {'name': 'black', 'abbr': 'Bl', 'rgb': (0, 0, 0)},
 }
+
+MINECRAFT_BLOCK_TYPES = {
+    'concrete': {
+        'name': 'concrete',
+        'prefix': 'minecraft:',
+        'suffix': '_concrete',
+    },
+    'wool': {
+        'name': 'wool',
+        'prefix': 'minecraft:',
+        'suffix': '_wool',
+    },
+    'carpet': {
+        'name': 'carpet',
+        'prefix': 'minecraft:',
+        'suffix': '_carpet',
+    },
+    'terracotta': {
+        'name': 'terracotta',
+        'prefix': 'minecraft:',
+        'suffix': '_terracotta',
+    },
+}
+
+MINECRAFT_CONCRETE_COLORS = MINECRAFT_COLORS
 
 COLOR_ALIASES = {
     '白': 'white', '白色': 'white', 'w': 'white',
@@ -255,11 +280,13 @@ def render_text_to_image(text, font_path, text_color_rgb, image_size=128, positi
     return img
 
 
-def create_litematic_from_image(image, text, color_key, font_name, output_dir):
+def create_litematic_from_image(image, text, color_key, font_name, output_dir, block_type='concrete'):
     width, height = image.size
     reg = Region(0, 0, 0, width, 1, height)
     
-    text_block = BlockState(MINECRAFT_CONCRETE_COLORS[color_key]['block'])
+    block_info = MINECRAFT_BLOCK_TYPES.get(block_type, MINECRAFT_BLOCK_TYPES['concrete'])
+    block_name = f"{block_info['prefix']}{color_key}{block_info['suffix']}"
+    text_block = BlockState(block_name)
     air_block = BlockState('minecraft:air')
     
     block_count = 0
@@ -273,12 +300,13 @@ def create_litematic_from_image(image, text, color_key, font_name, output_dir):
                 reg[x, 0, z] = air_block
     
     char_name = get_char_display_name(text)
-    color_name = t(MINECRAFT_CONCRETE_COLORS[color_key]['name'])
-    schem_name = f"{font_name}_{char_name}_{color_name}_{block_count}"
+    color_name = t(MINECRAFT_COLORS[color_key]['name'])
+    block_type_name = t(block_info['name'])
+    schem_name = f"{font_name}_{char_name}_{block_type_name}_{color_name}_{block_count}"
     schem = reg.as_schematic(
         name=schem_name,
         author="MapArtGenerator",
-        description=f"128x128 map art of '{text}' in {color_name}, {block_count} blocks"
+        description=f"128x128 map art of '{text}' in {color_name} {block_type_name}, {block_count} blocks"
     )
     
     output_path = os.path.join(output_dir, f"{schem_name}.litematic")
@@ -287,33 +315,63 @@ def create_litematic_from_image(image, text, color_key, font_name, output_dir):
     return output_path, block_count
 
 
-def generate_map_art(text, color_input, font_path, font_name, output_dir=None):
+def generate_map_art(text, color_input, font_path, font_name, output_dir=None, block_type='concrete'):
     color_key = get_color_key(color_input)
     if color_key is None:
         return False, t('unsupported_color', color=color_input)
     
-    text_color_rgb = MINECRAFT_CONCRETE_COLORS[color_key]['rgb']
+    text_color_rgb = MINECRAFT_COLORS[color_key]['rgb']
     position = CORNER_SYMBOLS.get(text, None)
     image = render_text_to_image(text, font_path, text_color_rgb, position=position)
     
     if output_dir is None:
         output_dir = os.path.join(os.path.dirname(__file__), 'litematic')
     
-    output_path, block_count = create_litematic_from_image(image, text, color_key, font_name, output_dir)
+    output_path, block_count = create_litematic_from_image(image, text, color_key, font_name, output_dir, block_type)
     
     return output_path, block_count
 
 
-def find_font_files(base_dir):
-    ttf_dir = os.path.join(base_dir, 'ttf')
+def find_system_fonts():
     font_files = []
     
+    font_extensions = ('.ttf', '.otf', '.ttc', '.otc')
+    
+    system_font_paths = []
+    if sys.platform == 'win32':
+        system_font_paths.append(os.path.join(os.environ.get('WINDIR', 'C:\\Windows'), 'Fonts'))
+        system_font_paths.append(os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Microsoft', 'Windows', 'Fonts'))
+    elif sys.platform == 'darwin':
+        system_font_paths.append('/Library/Fonts')
+        system_font_paths.append(os.path.expanduser('~/Library/Fonts'))
+    else:
+        system_font_paths.append('/usr/share/fonts')
+        system_font_paths.append('/usr/local/share/fonts')
+        system_font_paths.append(os.path.expanduser('~/.fonts'))
+    
+    for font_path in system_font_paths:
+        if os.path.exists(font_path):
+            for root, dirs, files in os.walk(font_path):
+                for filename in files:
+                    if filename.lower().endswith(font_extensions):
+                        font_files.append(os.path.join(root, filename))
+    
+    return sorted(font_files)
+
+
+def find_font_files(base_dir):
+    font_files = []
+    
+    ttf_dir = os.path.join(base_dir, 'ttf')
     if os.path.exists(ttf_dir):
         for filename in sorted(os.listdir(ttf_dir)):
             if filename.lower().endswith('.ttf'):
                 font_files.append(os.path.join(ttf_dir, filename))
     
-    return font_files[:10]
+    system_fonts = find_system_fonts()
+    font_files.extend(system_fonts)
+    
+    return font_files[:100]
 
 
 def ensure_directories(base_dir):

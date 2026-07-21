@@ -3,16 +3,20 @@ import os
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QComboBox, QLineEdit, QPushButton, QTextEdit, QGroupBox,
-    QGridLayout, QScrollArea, QMessageBox, QSplitter, QSizePolicy
+    QGridLayout, QScrollArea, QMessageBox, QSplitter, QSizePolicy,
+    QMenuBar, QMenu, QListWidget, QListWidgetItem,
+    QFileDialog
 )
-from PyQt6.QtGui import QColor, QPalette
+from PyQt6.QtGui import QColor, QPalette, QFont, QAction
 from PyQt6.QtCore import Qt, pyqtSignal
 
 from i18n import t, set_language
 from main import (
     find_font_files, ensure_directories, check_font_supports_char,
-    generate_map_art, MINECRAFT_CONCRETE_COLORS, get_color_key
+    generate_map_art, MINECRAFT_COLORS, MINECRAFT_BLOCK_TYPES, get_color_key,
+    render_text_to_image
 )
+from preview import PreviewWindow
 
 SYMBOL_CATEGORIES = {
     'punctuation': [
@@ -80,6 +84,11 @@ CATEGORY_TRANSLATION_KEYS = {
     'symbols': 'symbols',
 }
 
+PREVIEW_MODES = {
+    'map': {'name': 'map_art', 'label': 'Map Art Preview'},
+    'build_2d': {'name': 'build_2d', 'label': '2D Build Preview'},
+}
+
 
 class SymbolButton(QPushButton):
     clicked_with_symbol = pyqtSignal(str)
@@ -135,30 +144,39 @@ class MapArtGeneratorUI(QMainWindow):
         self.selected_font_path = None
         self.selected_font_name = None
         self.selected_color_key = None
+        self.selected_block_type = 'concrete'
+        self.default_block_type = 'concrete'
+        self.default_preview_mode = 'map'
+        self.default_font = ''
+        self.generated_files = []
         
+        self.load_settings()
         self.init_ui()
         self.load_fonts()
+        self.apply_defaults()
         self.update_ui_text()
 
     def init_ui(self):
         self.setWindowTitle(t('app_name'))
-        self.setGeometry(100, 100, 900, 700)
+        self.setGeometry(100, 100, 1000, 700)
+
+        menubar = self.menuBar()
+        
+        settings_action = QAction(f"{t('settings')} (Settings)", self)
+        settings_action.triggered.connect(self.open_settings_dialog)
+        menubar.addAction(settings_action)
+        
+        language_menu = menubar.addMenu(f"{t('language')} (Language)")
+        lang_action_zh = QAction(t('chinese'), self)
+        lang_action_zh.triggered.connect(lambda: self.change_language('zh_cn'))
+        language_menu.addAction(lang_action_zh)
+        lang_action_en = QAction(t('english'), self)
+        lang_action_en.triggered.connect(lambda: self.change_language('en'))
+        language_menu.addAction(lang_action_en)
 
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
-
-        top_bar = QHBoxLayout()
-        top_bar.addStretch()
-        
-        lang_label = QLabel(t('language'))
-        self.language_combo = QComboBox()
-        self.language_combo.addItem(t('chinese'), 'zh_cn')
-        self.language_combo.addItem(t('english'), 'en')
-        self.language_combo.currentIndexChanged.connect(self.change_language)
-        top_bar.addWidget(lang_label)
-        top_bar.addWidget(self.language_combo)
-        main_layout.addLayout(top_bar)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         
@@ -189,13 +207,25 @@ class MapArtGeneratorUI(QMainWindow):
         
         left_layout.addWidget(self.text_group)
 
+        self.block_type_group = QGroupBox()
+        block_type_layout = QVBoxLayout(self.block_type_group)
+        block_type_layout.setSpacing(5)
+        
+        self.block_type_combo = QComboBox()
+        for block_key, block_info in MINECRAFT_BLOCK_TYPES.items():
+            self.block_type_combo.addItem(t(block_info['name']), block_key)
+        self.block_type_combo.currentIndexChanged.connect(self.on_block_type_changed)
+        block_type_layout.addWidget(self.block_type_combo)
+        
+        left_layout.addWidget(self.block_type_group)
+
         self.color_group = QGroupBox()
         color_layout = QGridLayout(self.color_group)
         color_layout.setSpacing(5)
         self.color_buttons = []
         
         row, col = 0, 0
-        for color_key, color_info in MINECRAFT_CONCRETE_COLORS.items():
+        for color_key, color_info in MINECRAFT_COLORS.items():
             btn = ColorButton(color_key, color_info)
             btn.clicked_with_color.connect(self.on_color_selected)
             self.color_buttons.append(btn)
@@ -263,6 +293,17 @@ class MapArtGeneratorUI(QMainWindow):
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
         right_layout.setContentsMargins(10, 10, 10, 10)
+        right_layout.setSpacing(10)
+        
+        self.file_list_group = QGroupBox()
+        file_list_layout = QVBoxLayout(self.file_list_group)
+        
+        self.file_list = QListWidget()
+        self.file_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
+        self.file_list.doubleClicked.connect(self.on_file_double_click)
+        file_list_layout.addWidget(self.file_list)
+        
+        right_layout.addWidget(self.file_list_group)
         
         self.log_group = QGroupBox()
         log_layout = QVBoxLayout(self.log_group)
@@ -287,6 +328,108 @@ class MapArtGeneratorUI(QMainWindow):
         main_layout.addWidget(splitter)
 
         self.update_symbol_buttons()
+        self.load_existing_files()
+
+    def load_settings(self):
+        config_file = os.path.join(self.base_dir, 'config.json')
+        if os.path.exists(config_file):
+            try:
+                import json
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                    settings = config.get('settings', {})
+                    self.default_block_type = settings.get('default_block_type', 'concrete')
+                    self.default_preview_mode = settings.get('default_preview_mode', 'map')
+                    self.default_font = settings.get('default_font', '')
+            except:
+                pass
+
+    def save_settings(self):
+        config_file = os.path.join(self.base_dir, 'config.json')
+        try:
+            import json
+            config = {
+                'settings': {
+                    'default_block_type': self.default_block_type,
+                    'default_preview_mode': self.default_preview_mode,
+                    'default_font': self.default_font
+                },
+                'language': self.language
+            }
+            with open(config_file, 'w', encoding='utf-8') as f:
+                json.dump(config, f, indent=2, ensure_ascii=False)
+        except:
+            pass
+
+    def apply_defaults(self):
+        idx = self.block_type_combo.findData(self.default_block_type)
+        if idx >= 0:
+            self.block_type_combo.setCurrentIndex(idx)
+        
+        if self.default_font:
+            for i in range(self.font_combo.count()):
+                if self.font_combo.itemText(i) == self.default_font:
+                    self.font_combo.setCurrentIndex(i)
+                    break
+
+    def open_settings_dialog(self):
+        dialog = QWidget()
+        dialog.setWindowTitle(t('settings'))
+        dialog.setGeometry(300, 300, 400, 300)
+        
+        layout = QVBoxLayout(dialog)
+        
+        block_type_label = QLabel(t('default_block_type'))
+        layout.addWidget(block_type_label)
+        block_type_combo = QComboBox()
+        for block_key, block_info in MINECRAFT_BLOCK_TYPES.items():
+            block_type_combo.addItem(t(block_info['name']), block_key)
+        idx = block_type_combo.findData(self.default_block_type)
+        if idx >= 0:
+            block_type_combo.setCurrentIndex(idx)
+        layout.addWidget(block_type_combo)
+        
+        preview_mode_label = QLabel(t('default_preview_mode'))
+        layout.addWidget(preview_mode_label)
+        preview_mode_combo = QComboBox()
+        for mode_key, mode_info in PREVIEW_MODES.items():
+            preview_mode_combo.addItem(t(mode_info['name']), mode_key)
+        idx = preview_mode_combo.findData(self.default_preview_mode)
+        if idx >= 0:
+            preview_mode_combo.setCurrentIndex(idx)
+        layout.addWidget(preview_mode_combo)
+        
+        font_label = QLabel(t('default_font'))
+        layout.addWidget(font_label)
+        font_combo = QComboBox()
+        font_combo.addItem(t('none'), '')
+        for font_path in self.font_files:
+            font_name = os.path.splitext(os.path.basename(font_path))[0]
+            font_combo.addItem(font_name, font_path)
+        for i in range(font_combo.count()):
+            if font_combo.itemText(i) == self.default_font:
+                font_combo.setCurrentIndex(i)
+                break
+        layout.addWidget(font_combo)
+        
+        button_layout = QHBoxLayout()
+        ok_btn = QPushButton(t('ok'))
+        ok_btn.clicked.connect(lambda: self.save_settings_from_dialog(dialog, block_type_combo, preview_mode_combo, font_combo))
+        button_layout.addWidget(ok_btn)
+        cancel_btn = QPushButton(t('cancel'))
+        cancel_btn.clicked.connect(dialog.close)
+        button_layout.addWidget(cancel_btn)
+        layout.addLayout(button_layout)
+        
+        dialog.show()
+
+    def save_settings_from_dialog(self, dialog, block_type_combo, preview_mode_combo, font_combo):
+        self.default_block_type = block_type_combo.currentData()
+        self.default_preview_mode = preview_mode_combo.currentData()
+        self.default_font = font_combo.currentText()
+        self.save_settings()
+        dialog.close()
+        QMessageBox.information(self, t('success'), t('settings_saved'))
 
     def load_fonts(self):
         ensure_directories(self.base_dir)
@@ -304,14 +447,26 @@ class MapArtGeneratorUI(QMainWindow):
         if self.font_files:
             self.on_font_changed(0)
 
+    def load_existing_files(self):
+        litematic_dir = os.path.join(self.base_dir, 'litematic')
+        if os.path.exists(litematic_dir):
+            for filename in sorted(os.listdir(litematic_dir)):
+                if filename.endswith('.litematic'):
+                    item = QListWidgetItem(filename)
+                    item.setData(Qt.ItemDataRole.UserRole, os.path.join(litematic_dir, filename))
+                    self.file_list.addItem(item)
+
     def on_font_changed(self, index):
         if index >= 0 and index < len(self.font_files):
             self.selected_font_path = self.font_files[index]
             self.selected_font_name = os.path.splitext(os.path.basename(self.selected_font_path))[0]
 
+    def on_block_type_changed(self, index):
+        self.selected_block_type = self.block_type_combo.currentData()
+
     def on_color_selected(self, color_key):
         self.selected_color_key = color_key
-        color_info = MINECRAFT_CONCRETE_COLORS[color_key]
+        color_info = MINECRAFT_COLORS[color_key]
         self.selected_color_label.setText(f"{t(color_info['name'])} ({color_info['abbr']})")
         
         for btn in self.color_buttons:
@@ -358,27 +513,30 @@ class MapArtGeneratorUI(QMainWindow):
         current_text = self.text_input.text()
         self.text_input.setText(current_text + symbol)
 
-    def change_language(self, index):
-        lang = self.language_combo.currentData()
+    def change_language(self, lang):
         set_language(lang)
         self.update_ui_text()
 
     def update_ui_text(self):
         self.setWindowTitle(t('app_name'))
         
-        self.language_combo.setItemText(0, t('chinese'))
-        self.language_combo.setItemText(1, t('english'))
-        
         self.font_group.setTitle(t('font_selection'))
         self.text_group.setTitle(t('text_input'))
+        self.block_type_group.setTitle(t('block_type_selection'))
         self.color_group.setTitle(t('color_selection'))
         self.symbol_group.setTitle(t('symbol_selection'))
         self.log_group.setTitle(t('log_output'))
+        self.file_list_group.setTitle(t('generated_files'))
         
         self.text_input.setPlaceholderText(t('input_text'))
         self.selected_color_label.setText(t('select_color'))
         self.generate_btn.setText(t('generate_button'))
         self.clear_log_btn.setText(t('clear_log'))
+        
+        for block_key, block_info in MINECRAFT_BLOCK_TYPES.items():
+            idx = self.block_type_combo.findData(block_key)
+            if idx >= 0:
+                self.block_type_combo.setItemText(idx, t(block_info['name']))
         
         for cat_key in SYMBOL_CATEGORIES:
             idx = self.symbol_category_combo.findData(cat_key)
@@ -396,6 +554,17 @@ class MapArtGeneratorUI(QMainWindow):
 
     def clear_log(self):
         self.log_text.clear()
+
+    def on_file_double_click(self, index):
+        item = self.file_list.itemFromIndex(index)
+        if item:
+            file_path = item.data(Qt.ItemDataRole.UserRole)
+            if file_path and os.path.exists(file_path):
+                self.open_preview(file_path)
+
+    def open_preview(self, file_path):
+        preview_window = PreviewWindow(file_path, self.base_dir, self)
+        preview_window.show()
 
     def on_generate(self):
         if not self.selected_font_path:
@@ -429,7 +598,7 @@ class MapArtGeneratorUI(QMainWindow):
         
         for i, char in enumerate(text):
             self.log(t('generating', current=i+1, total=len(text), char=char))
-            result = generate_map_art(char, self.selected_color_key, self.selected_font_path, self.selected_font_name, litematic_dir)
+            result = generate_map_art(char, self.selected_color_key, self.selected_font_path, self.selected_font_name, litematic_dir, self.selected_block_type)
             
             if result[0] is False:
                 self.log(t('generation_failed'))
@@ -437,10 +606,15 @@ class MapArtGeneratorUI(QMainWindow):
             
             output_path, block_count = result
             total_blocks += block_count
-            generated_files.append((char, output_path))
+            generated_files.append(output_path)
             
             self.log(t('generation_success', path=output_path))
             self.log(t('block_count', count=block_count))
+            
+            filename = os.path.basename(output_path)
+            item = QListWidgetItem(filename)
+            item.setData(Qt.ItemDataRole.UserRole, output_path)
+            self.file_list.addItem(item)
         
         self.log("")
         self.log("=" * 60)
